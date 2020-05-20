@@ -296,7 +296,7 @@ class Manager
 
                         $path = $path.DIRECTORY_SEPARATOR.$locale.DIRECTORY_SEPARATOR.$group.'.php';
 
-                        $output = "<?php\n\nreturn " . VarExporter::export($translations, true) . ';' . \PHP_EOL;
+                        $output = VarExporter::export($translations, true);
                         $this->files->put($path, $output);
                     }
                 }
