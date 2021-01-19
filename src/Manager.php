@@ -53,6 +53,83 @@ class Manager
         return ($result && is_array($result)) ? $result : [];
     }
 
+    public function replaceTranslations($base = null, $import_group = false)
+    {
+        $counter = 0;
+        //allows for vendor lang files to be properly recorded through recursion.
+        $vendor = true;
+        if ($base == null) {
+            $base = $this->app['path.lang'];
+            $vendor = false;
+        }
+
+        foreach ($this->files->directories($base) as $langPath) {
+            $locale = basename($langPath);
+
+            //import langfiles for each vendor
+            if ($locale == 'vendor') {
+                foreach ($this->files->directories($langPath) as $vendor) {
+                    $counter += $this->replaceTranslations($vendor);
+                }
+
+                continue;
+            }
+            $vendorName = $this->files->name($this->files->dirname($langPath));
+            foreach ($this->files->allfiles($langPath) as $file) {
+                $info = pathinfo($file);
+                $group = $info['filename'];
+                if ($import_group) {
+                    if ($import_group !== $group) {
+                        continue;
+                    }
+                }
+
+                if (in_array($group, $this->config['exclude_groups'])) {
+                    continue;
+                }
+                $subLangPath = str_replace($langPath.DIRECTORY_SEPARATOR, '', $info['dirname']);
+                $subLangPath = str_replace(DIRECTORY_SEPARATOR, '/', $subLangPath);
+                $langPath = str_replace(DIRECTORY_SEPARATOR, '/', $langPath);
+
+                if ($subLangPath != $langPath) {
+                    $group = $subLangPath.'/'.$group;
+                }
+
+                if (! $vendor) {
+                    $translations = \Lang::getLoader()->load($locale, $group);
+                } else {
+                    $translations = include $file;
+                    $group = 'vendor/'.$vendorName;
+                }
+
+                if ($translations && is_array($translations)) {
+                    foreach (Arr::dot($translations) as $key => $value) {
+                        $importedTranslation = $this->replaceTranslation($key, $value, $locale, $group);
+                        $counter += $importedTranslation ? 1 : 0;
+                    }
+                }
+            }
+        }
+
+        foreach ($this->files->files($this->app['path.lang']) as $jsonTranslationFile) {
+            if (strpos($jsonTranslationFile, '.json') === false) {
+                continue;
+            }
+            $locale = basename($jsonTranslationFile, '.json');
+            $group = self::JSON_GROUP;
+            $translations =
+                \Lang::getLoader()->load($locale, '*', '*'); // Retrieves JSON entries of the given locale only
+            if ($translations && is_array($translations)) {
+                foreach ($translations as $key => $value) {
+                    $importedTranslation = $this->replaceTranslation($key, $value, $locale, $group);
+                    $counter += $importedTranslation ? 1 : 0;
+                }
+            }
+        }
+
+        return $counter;
+    }
+
     public function importTranslations($replace = false, $base = null, $import_group = false)
     {
         $counter = 0;
@@ -128,6 +205,42 @@ class Manager
         }
 
         return $counter;
+    }
+
+    public function replaceTranslation($key, $value, $locale, $group)
+    {
+
+        // process only string values
+        if (is_array($value)) {
+            return false;
+        }
+        $value = (string) $value;
+
+        if ($locale != "fr") {
+            $translation = Translation::firstOrNew([
+                'locale' => $locale,
+                'group'  => $group,
+                'key'    => $key,
+            ]);
+        }
+        else
+        {
+            // Only update existing translations
+            $translation = Translation::where('key', $key)->where('group', $group)->where('locale', $locale)->first();
+            if (!isset($translation))
+                return false;
+        }
+
+        // Check if the database is different then the files
+        $newStatus = $translation->value === $value ? Translation::STATUS_SAVED : Translation::STATUS_CHANGED;
+        if ($newStatus !== (int) $translation->status) {
+            $translation->status = $newStatus;
+        }
+
+        $translation->value = $value;
+        $translation->save();
+
+        return true;
     }
 
     public function importTranslation($key, $value, $locale, $group, $replace = false)
