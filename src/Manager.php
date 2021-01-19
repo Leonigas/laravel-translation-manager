@@ -217,6 +217,10 @@ class Manager
         $value = (string) $value;
 
         if ($locale != "fr") {
+            $has_fr_trans = Translation::where('key', $key)->where('locale', 'fr')->where('group', $group)->first();
+            if (!isset($has_fr_trans))
+                return false;
+
             $translation = Translation::firstOrNew([
                 'locale' => $locale,
                 'group'  => $group,
