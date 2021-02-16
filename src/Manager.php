@@ -307,7 +307,7 @@ class Manager
 
         // Find all PHP + Twig files in the app folder, except for storage
         $finder = new Finder();
-        $finder->in($path)->exclude('storage')->exclude('vendor')->name('*.php')->name('*.twig')->name('*.vue')->files();
+        $finder->in($path)->exclude('storage')->exclude('node_modules')->exclude('vendor')->exclude('resources/assets')->exclude('public')->name('*.php')->name('*.twig')->name('*.vue')->name('*.js')->files();
 
         /** @var \Symfony\Component\Finder\SplFileInfo $file */
         foreach ($finder as $file) {
